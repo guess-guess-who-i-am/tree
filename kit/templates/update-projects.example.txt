@@ -1,5 +1,0 @@
-# One project root per line. Lines starting with # are ignored.
-# Example:
-# D:\research\my-thesis
-# D:\your-project
-# <project>

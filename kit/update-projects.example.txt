@@ -1,4 +1,0 @@
-# One project root per line. Lines starting with # are ignored.
-# Used by update-all-projects.ps1 -ProjectsFile and by one-click update as a sidecar list.
-# D:\work\my-project
-# D:\work\another-project
