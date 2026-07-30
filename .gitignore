@@ -4,4 +4,5 @@ node_modules/
 .task-tree-ports
 install.manifest.json
 update-projects.txt
+update-search-roots.txt
 open-webSearch/
