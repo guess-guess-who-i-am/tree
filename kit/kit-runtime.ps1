@@ -791,6 +791,33 @@ function Ensure-ProjectCursorMcp {
   }
 }
 
+<#
+Registers the task-graph MCP server and plugin in Codex's config.toml.
+
+The desktop app and the CLI read the same config, so this is what puts the tools in the
+desktop UI without anyone typing a codex command. Machine-wide, idempotent, and reversible
+through `install-codex-mcp.mjs --with-plugin --remove`. Returns the action the registrator
+reported ("appended" / "none" / "removed"), or "" when Codex is not installed here.
+#>
+function Ensure-CodexRegistration {
+  param([string]$KitDir)
+
+  $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
+  if (-not (Test-Path -LiteralPath $codexHome)) { return "" }
+
+  $script = Join-Path $KitDir "scripts\install-codex-mcp.mjs"
+  if (-not (Test-Path -LiteralPath $script)) { return "" }
+
+  try {
+    $output = & node $script --with-plugin --codex-home $codexHome 2>&1
+    if ("$output" -match '"action"\s*:\s*"([a-z]+)"') { return $Matches[1] }
+    return "unknown"
+  } catch {
+    Write-Warning "Codex registration skipped: $($_.Exception.Message)"
+    return ""
+  }
+}
+
 function Sync-ProjectAgentPrompts {
   param(
     [string]$ProjectRoot,

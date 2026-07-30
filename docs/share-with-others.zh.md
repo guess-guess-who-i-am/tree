@@ -32,23 +32,21 @@ powershell -File <kit>\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseShar
 
 对方克隆仓库、信任工作区，重启 Cursor 即可用上 14 个工具。前提是仓库里带着 `llm-task-tree/` stub 和一份可达的 kit。
 
-## 路径 2：Codex —— 从 Git 市场安装
+## 路径 2：Codex 桌面端 —— 装 kit 时自动注册（不需要 CLI）
 
-把仓库推成公开仓库，对方一条命令添加市场：
+桌面端（VS Code / Cursor 里的 Codex 扩展、Codex app）和 CLI 读的是同一个 `~/.codex/config.toml`，插件与 MCP 都由这份配置驱动。所以对方只要克隆仓库、跑一次部署：
 
-```bash
-codex plugin marketplace add guess-guess-who-i-am/tree
+```powershell
+powershell -File kit\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseSharedKit
 ```
 
-仓库根目录的 `.agents/plugins/marketplace.json` 指向 `./marketplace/plugins/task-tree`，Codex 克隆后就能解析。随后注册 MCP 入口：
+安装末尾会调 `Ensure-CodexRegistration`，往 `config.toml` 写三个块：`[mcp_servers.task_tree]`、`[marketplaces.llm-task-tree]`、`[plugins."task-tree@llm-task-tree"]`。**重启 Codex 桌面端**后，桌面端会自己把插件物化到 `~/.codex/plugins/cache/llm-task-tree/task-tree/<版本>/`，插件列表里就能看到，14 个工具可用。
 
-```bash
-node <kit>/scripts/install-codex-mcp.mjs --with-plugin
-```
+只想注册不装项目：`node <kit>/scripts/install-codex-mcp.mjs --with-plugin`。
 
-注册的是**共享 kit** 的入口而不是某个仓库路径，所以一台机器注册一次，所有装了 stub 的项目都能用；每个会话按自己的 cwd 定位项目根。写入前自动备份 `config.toml`，重复执行是空操作，`--remove` 整块撤销。
+注册的是**共享 kit** 的入口而不是某个仓库路径，所以一台机器注册一次，所有装了 stub 的项目都能用；每个会话按自己的 cwd 定位项目根。写入前自动备份 `config.toml`，重复执行是空操作，`--remove` 整块撤销；机器上没有 `~/.codex` 时安装脚本直接跳过，不会凭空造配置。
 
-Git 市场的快照登记由 `codex plugin marketplace add` 自己管理，安装脚本只写已验证的本地市场形态（`source_type = "local"`），不伪造 Git 字段。
+装了 codex CLI 的人还可以 `codex plugin marketplace add guess-guess-who-i-am/tree` 从 Git 市场取插件（仓库根的 `.agents/plugins/marketplace.json` 指向 `./marketplace/plugins/task-tree`）。Git 快照登记由该命令自己管理，安装脚本只写已验证的本地市场形态（`source_type = "local"`），不伪造 Git 字段。
 
 ## 路径 3：本地市场 / 本地插件（不发布也能用）
 

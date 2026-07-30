@@ -20,14 +20,17 @@ powershell -File kit\deploy-task-tree.ps1 -ProjectRoot <你的项目路径> -Use
 
 **Cursor**：安装已经写好 `.cursor/mcp.json`，入口是 `${workspaceFolder}/llm-task-tree/mcp-server.mjs`，不含绝对路径，可以直接提交进你的仓库——队友克隆后同样可用。重启 Cursor 生效。
 
-**Codex**：
+**Codex（桌面端，不需要 CLI）**：上面那条安装命令跑完就已经注册好了——桌面端和 CLI 读同一个 `~/.codex/config.toml`。**重启 Codex 桌面端**，插件出现在插件列表，工具可用。
+
+只想注册、不装项目：
 
 ```bash
-codex plugin marketplace add guess-guess-who-i-am/tree
 node kit/scripts/install-codex-mcp.mjs --with-plugin
 ```
 
-第二条命令往 `~/.codex/config.toml` 追加 `[mcp_servers.task_tree]`，写前备份，重复执行是空操作，`--remove` 整块撤销。注册的入口是共享 kit，所以一台机器注册一次，所有装了 stub 的项目都能用。
+它往 `config.toml` 追加 `[mcp_servers.task_tree]`、`[marketplaces.llm-task-tree]`、`[plugins."task-tree@llm-task-tree"]`，写前备份，重复执行是空操作，`--remove` 整块撤销。入口指向共享 kit，所以一台机器注册一次，所有装了 stub 的项目都能用。
+
+装了 CLI 的话还可以 `codex plugin marketplace add guess-guess-who-i-am/tree`，但这不是必需的。
 
 ## 14 个工具
 

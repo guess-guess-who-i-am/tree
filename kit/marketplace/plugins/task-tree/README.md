@@ -24,17 +24,23 @@ powershell -File <kit>\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseShar
 
 ## 安装
 
-### Codex
+### Codex（桌面端，不需要 CLI）
+
+桌面端和 CLI 读的是同一个 `~/.codex/config.toml`，所以装 kit 的时候就顺带注册好了：
+
+```powershell
+powershell -File kit\deploy-task-tree.ps1 -ProjectRoot <你的项目路径> -UseSharedKit
+```
+
+安装完**重启 Codex 桌面端**，插件就出现在插件列表里，14 个工具可用。只想注册不装项目的话，单独跑注册器也行：
 
 ```bash
-# 1) 从 Git 仓库添加市场（别人的电脑上就这一步）
-codex plugin marketplace add guess-guess-who-i-am/tree
-
-# 2) 注册 MCP 服务（工具的实际入口，指向本机的共享 kit）
 node <kit>/scripts/install-codex-mcp.mjs --with-plugin
 ```
 
-第 2 步会往 `~/.codex/config.toml` 追加 `[mcp_servers.task_tree]`，先备份原文件，重复执行是空操作，`--remove` 可整块撤销。注册的入口是共享 kit 而不是某一个仓库，所以一次注册对这台机器上所有装了 stub 的项目都生效——每个会话按自己的 cwd 找项目根。
+注册器往 `config.toml` 追加 `[mcp_servers.task_tree]`、`[marketplaces.llm-task-tree]` 和 `[plugins."task-tree@llm-task-tree"]`，写前备份，重复执行是空操作，`--remove` 整块撤销。入口指向共享 kit 而不是某一个仓库，所以一台机器注册一次，所有装了 stub 的项目都生效——每个会话按自己的 cwd 找项目根。
+
+装了 CLI 的话，`codex plugin marketplace add guess-guess-who-i-am/tree` 是另一条等价的取插件路径，但不是必需的。
 
 ### Cursor
 

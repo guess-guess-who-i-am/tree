@@ -8,9 +8,9 @@
 
 ```bash
 git clone https://github.com/guess-guess-who-i-am/tree.git
-# 或（Codex 插件市场）
-codex plugin marketplace add guess-guess-who-i-am/tree
 ```
+
+装了 codex CLI 的话，`codex plugin marketplace add guess-guess-who-i-am/tree` 是等价的取法，但不是必需的。
 
 ### 2. 部署到你的项目
 
@@ -18,15 +18,14 @@ codex plugin marketplace add guess-guess-who-i-am/tree
 powershell -File .\deploy-task-tree.ps1 -ProjectRoot <你的项目路径> -UseSharedKit
 ```
 
-会写入：`task-tree.md`、`AGENTS.md`、`.cursor/mcp.json`、`.cursor/rules/`、`llm-task-tree/` stub。
+会写入：`task-tree.md`、`AGENTS.md`、`.cursor/mcp.json`、`.cursor/rules/`、`llm-task-tree/` stub，并在这台机器上注册 Codex（`~/.codex/config.toml`）。
 
-### 3. 注册 Codex MCP（本机一次）
+### 3. 重启客户端
 
-```bash
-node .\scripts\install-codex-mcp.mjs --with-plugin
-```
+- **Codex 桌面端**：重启后插件出现在插件列表，14 个工具可用。桌面端和 CLI 读同一份配置，所以不需要敲任何 codex 命令。
+- **Cursor**：提交仓库里的 `.cursor/mcp.json`（已用 `${workspaceFolder}`，可直接分享），重启生效。
 
-Cursor 用户只需提交仓库里的 `.cursor/mcp.json`（已用 `${workspaceFolder}`，可直接分享）。
+只想注册 Codex、不装项目：`node .\scripts\install-codex-mcp.mjs --with-plugin`（可重复执行，`--remove` 撤销）。
 
 ## 需要
 

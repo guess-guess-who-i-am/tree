@@ -220,6 +220,15 @@ if ((Test-Path -LiteralPath $envTarget) -and (Select-String -LiteralPath $envTar
   & (Join-Path $KitDir "setup-open-websearch.ps1") -KitDir $KitDir
 }
 
+$codexAction = Ensure-CodexRegistration -KitDir $KitDir
+if ($codexAction -eq "appended") {
+  Write-Step "Registered task_tree in Codex — restart the Codex desktop app to see the plugin"
+} elseif ($codexAction -eq "none") {
+  Write-Step "Codex registration already present"
+} elseif ($codexAction) {
+  Write-Step "Codex registration: $codexAction"
+}
+
 Write-Host ""
 Write-Host "Done. Next steps:"
 Write-Host "  1. Open task graph: double-click llm-task-tree\open-task-tree.cmd"
