@@ -1,0 +1,7 @@
+node_modules/
+.env
+.task-tree-port
+.task-tree-ports
+install.manifest.json
+update-projects.txt
+open-webSearch/
