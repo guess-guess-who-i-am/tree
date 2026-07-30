@@ -7,7 +7,7 @@ set "LLM_TASK_TREE_SETUP_FILE=%~f0"
 goto :MAIN
 
 :: 只需复制本文件到目标项目根目录，改下面这一行 kit 路径（留空则用环境变量或本项目下的 llm-task-tree-kit 文件夹）
-::KITPATH=<你的路径>\llm-task-tree-kit
+::KITPATH=
 
 :MAIN
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -86,7 +86,7 @@ function Find-KitSource {
   4. （旧方式）同目录放 setup-task-tree.kitpath 文件
 
 ::KITPATH 示例（仅一行，写在本 cmd 文件里）：
-  ::KITPATH=E:\你的路径\llm-task-tree-kit
+  ::KITPATH=
 "@
 }
 
