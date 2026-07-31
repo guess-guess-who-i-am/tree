@@ -22,7 +22,8 @@ powershell -File .\deploy-task-tree.ps1 -ProjectRoot <你的项目路径> -UseSh
 
 ### 3. 重启客户端
 
-- **Codex 桌面端**：重启后插件出现在插件列表，14 个工具可用。桌面端和 CLI 读同一份配置，所以不需要敲任何 codex 命令。
+- **ChatGPT 桌面应用**：重启后进 Plugins，来源选「任务图（llm-task-tree）」，插件带图标和四条一键提示词，14 个工具可用。不需要敲任何 codex 命令。
+- **IDE 扩展（VS Code / Cursor 里的 Codex）**：官方没给插件面板，但工具照样能调——`[mcp_servers.task_tree]` 是全局注册的。
 - **Cursor**：提交仓库里的 `.cursor/mcp.json`（已用 `${workspaceFolder}`，可直接分享），重启生效。
 
 只想注册 Codex、不装项目：`node .\scripts\install-codex-mcp.mjs --with-plugin`（可重复执行，`--remove` 撤销）。

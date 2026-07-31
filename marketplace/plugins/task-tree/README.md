@@ -24,15 +24,15 @@ powershell -File <kit>\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseShar
 
 ## 安装
 
-### Codex（桌面端，不需要 CLI）
+### Codex（ChatGPT 桌面应用，不需要 CLI）
 
-桌面端和 CLI 读的是同一个 `~/.codex/config.toml`，所以装 kit 的时候就顺带注册好了：
+桌面应用、IDE 扩展和 CLI 读的是同一个 `~/.codex/config.toml`，所以装 kit 的时候就顺带注册好了：
 
 ```powershell
 powershell -File kit\deploy-task-tree.ps1 -ProjectRoot <你的项目路径> -UseSharedKit
 ```
 
-安装完**重启 Codex 桌面端**，插件就出现在插件列表里，14 个工具可用。只想注册不装项目的话，单独跑注册器也行：
+安装完**重启 ChatGPT 桌面应用**。只想注册不装项目的话，单独跑注册器也行：
 
 ```bash
 node <kit>/scripts/install-codex-mcp.mjs --with-plugin
@@ -41,6 +41,26 @@ node <kit>/scripts/install-codex-mcp.mjs --with-plugin
 注册器往 `config.toml` 追加 `[mcp_servers.task_tree]`、`[marketplaces.llm-task-tree]` 和 `[plugins."task-tree@llm-task-tree"]`，写前备份，重复执行是空操作，`--remove` 整块撤销。入口指向共享 kit 而不是某一个仓库，所以一台机器注册一次，所有装了 stub 的项目都生效——每个会话按自己的 cwd 找项目根。
 
 装了 CLI 的话，`codex plugin marketplace add guess-guess-who-i-am/tree` 是另一条等价的取插件路径，但不是必需的。
+
+## 在桌面应用里怎么用
+
+插件目录只在 **ChatGPT 桌面应用**里有（Codex 模式，或 ChatGPT 模式打开 Work 开关）：**Plugins → 选来源「任务图（llm-task-tree）」→ task-tree**。装上之后新开一个会话，输入框的 `+` 里能看到它的图标，四条一键提示词（读焦点 / 写结论 / 推进一步 / 查知识库）点了就跑。
+
+IDE 扩展（VS Code、Cursor 里的 Codex）**没有插件面板**——这是官方限制，不是配置问题。但 `[mcp_servers.task_tree]` 是全局的，所以在 IDE 扩展里 14 个工具照样能调，只是不出现在"插件列表"这个界面里。
+
+## 改了插件之后怎么刷新
+
+1. 改 `marketplace/plugins/task-tree/`（清单、技能、图标）。
+2. **提升 `.codex-plugin/plugin.json` 的 `version`**——桌面应用按 `~/.codex/plugins/cache/<市场>/<插件>/<版本>/` 装，版本不变就还是旧目录。
+3. 重建 kit（`scripts/build-kit.ps1`），因为 `config.toml` 注册的是 kit 里那份。
+4. 重启 ChatGPT 桌面应用。
+
+`codex plugin marketplace upgrade` 对这里没用——它只认 Git 市场，本地市场会直接报错。校验清单是否还合规：
+
+```bash
+node scripts/build-plugin-assets.mjs        # 重新生成 360/512 图标，纯 Node，不依赖浏览器
+node scripts/test-plugin-manifest.mjs       # 清单字段、资源尺寸、市场 policy 全量校验
+```
 
 ### Cursor
 

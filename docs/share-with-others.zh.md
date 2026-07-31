@@ -34,13 +34,17 @@ powershell -File <kit>\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseShar
 
 ## 路径 2：Codex 桌面端 —— 装 kit 时自动注册（不需要 CLI）
 
-桌面端（VS Code / Cursor 里的 Codex 扩展、Codex app）和 CLI 读的是同一个 `~/.codex/config.toml`，插件与 MCP 都由这份配置驱动。所以对方只要克隆仓库、跑一次部署：
+ChatGPT 桌面应用、IDE 扩展（VS Code / Cursor 里的 Codex）和 CLI 读的是同一个 `~/.codex/config.toml`，插件与 MCP 都由这份配置驱动。所以对方只要克隆仓库、跑一次部署：
 
 ```powershell
 powershell -File kit\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseSharedKit
 ```
 
-安装末尾会调 `Ensure-CodexRegistration`，往 `config.toml` 写三个块：`[mcp_servers.task_tree]`、`[marketplaces.llm-task-tree]`、`[plugins."task-tree@llm-task-tree"]`。**重启 Codex 桌面端**后，桌面端会自己把插件物化到 `~/.codex/plugins/cache/llm-task-tree/task-tree/<版本>/`，插件列表里就能看到，14 个工具可用。
+安装末尾会调 `Ensure-CodexRegistration`，往 `config.toml` 写三个块：`[mcp_servers.task_tree]`、`[marketplaces.llm-task-tree]`、`[plugins."task-tree@llm-task-tree"]`。**重启 ChatGPT 桌面应用**后，它会把插件物化到 `~/.codex/plugins/cache/llm-task-tree/task-tree/<版本>/`，Plugins 目录里选来源「任务图（llm-task-tree）」就能看到，14 个工具可用。
+
+**分清两个界面**：插件目录只存在于 ChatGPT 桌面应用（Codex 模式，或 ChatGPT 模式打开 Work 开关）。IDE 扩展按官方说明没有插件面板——但 `[mcp_servers.task_tree]` 是全局的，工具在 IDE 扩展和 CLI 里照常可用，只是不出现在"插件列表"这个 UI 里。
+
+改了插件要让桌面应用看到新版本，必须**提升 `.codex-plugin/plugin.json` 的 `version`** 再重启：安装缓存按版本号分目录，版本不变就还是加载旧目录。`codex plugin marketplace upgrade` 帮不上忙，它只认 Git 市场，对本地市场会直接报错。
 
 只想注册不装项目：`node <kit>/scripts/install-codex-mcp.mjs --with-plugin`。
 
@@ -63,16 +67,21 @@ powershell -File kit\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseShared
 `marketplace/plugins/task-tree/` 同时是 Codex 插件和 Cursor 插件：
 
 ```
-.codex-plugin/plugin.json   # Codex 清单
+.codex-plugin/plugin.json   # Codex 清单（含上架元数据：图标、品牌色、一键提示词）
 .cursor-plugin/plugin.json  # Cursor 清单
 mcp.json                    # Cursor 自动发现的 MCP 定义
+assets/icon.png             # 360×360，桌面应用输入框里的图标
+assets/logo.png             # 512×512，插件目录里的 logo
 skills/task-tree/SKILL.md   # 两边共用的技能文档
 README.md
 ```
 
+图标由 `node scripts/build-plugin-assets.mjs` 生成：纯 Node 光栅化（SDF + 超采样 + zlib 写 PNG），不依赖浏览器或图形库，别人机器上重跑结果一致。
+
 ## 验证
 
 ```bash
-node scripts/test-share-install.mjs   # 8 例：装到陌生项目、注册到空白 CODEX_HOME、跑通 14 个工具
-node scripts/test-mcp-server.mjs      # 22 例：工具行为回归
+node scripts/test-share-install.mjs     # 10 例：装到陌生项目、注册到空白 CODEX_HOME、跑通 14 个工具、审计打包后的插件清单
+node scripts/test-mcp-server.mjs        # 22 例：工具行为回归
+node scripts/test-plugin-manifest.mjs   # 6 例：清单字段、资源尺寸、市场 policy
 ```
