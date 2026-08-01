@@ -11,6 +11,16 @@ import {
 import { getFlowStep, listStepPackIndex, putFlowStep } from "./server/flow-step.js";
 import { addTree, findTree, loadTreeRegistry, resolveTreeFile, setActiveMethod, starterTreeMarkdown } from "./server/tree-registry.js";
 import { auditTurnMaintenance, maskAdvisoryNextPlan, syncMethodFlowStatus } from "./server/maintenance.js";
+import {
+  listProjectThreads,
+  openInCodex,
+  readPinnedThread,
+  startCodexTurn,
+  threadDeepLink,
+  writePinnedThread
+} from "./server/codex-run.js";
+import { buildPresetPrompt, describePresets } from "./server/codex-prompts.js";
+import { describeProjects, ensureProjectServer } from "./server/projects.js";
 import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
@@ -2174,6 +2184,34 @@ function buildChainStepContext(markdown) {
   };
 }
 
+/**
+ * The live facts the Codex presets are built from. Read fresh on every menu open and every send,
+ * because a prompt naming the wrong Next node is worse than no prompt at all.
+ */
+async function readCodexPromptState() {
+  const scope = await readScopeMarkdown("");
+  const markdown = scope?.markdown || "";
+  const state = parseGraphStateFields(markdown);
+  const chain = buildChainStepContext(markdown);
+  const heading = state.next
+    ? extractNodeMarkdown(markdown, state.next).split(/\r?\n/, 1)[0] || ""
+    : "";
+
+  return {
+    focus: {
+      nodeId: state.next,
+      title: heading.replace(/^##\s+\S+\s+-\s+/, "").trim(),
+      nextIdea: getNextNodeNextIdea(markdown, state.next)
+    },
+    chain: {
+      agentPrompt: chain.agentPrompt,
+      shouldStopLoop: chain.shouldStopLoop,
+      stopReason: chain.stopReason,
+      position: chain.chainPosition ? `第 ${chain.chainPosition.step}/${chain.chainPosition.total} 步` : ""
+    }
+  };
+}
+
 async function writeChainStepContextFile(markdown, meta = {}) {
   const context = buildChainStepContext(markdown);
   const chainRunDir = path.resolve(projectRoot, ".chain-run");
@@ -3778,6 +3816,86 @@ const server = http.createServer(async (req, res) => {
         name: path.basename(projectRoot),
         treeFile: path.relative(projectRoot, treeFile)
       }), "application/json; charset=utf-8");
+      return;
+    }
+
+    if (reqPath === "/api/projects" && req.method === "GET") {
+      jsonResponse(res, 200, { current: projectRoot, projects: describeProjects({ currentRoot: projectRoot }) });
+      return;
+    }
+
+    if (reqPath === "/api/projects/open" && req.method === "POST") {
+      const body = req.headers["content-length"] ? JSON.parse(await readBody(req)) : {};
+      const root = typeof body.root === "string" ? body.root.trim() : "";
+      if (!root) {
+        jsonResponse(res, 400, { error: "root is required" });
+        return;
+      }
+      try {
+        jsonResponse(res, 200, await ensureProjectServer(root, { fallbackKitDir: kitDir }));
+      } catch (error) {
+        jsonResponse(res, 502, { error: error.message });
+      }
+      return;
+    }
+
+    if (reqPath === "/api/codex/threads" && req.method === "GET") {
+      // Threads and presets travel together because the menu shows both at once, and a second
+      // round-trip would let the two halves disagree about which node is Next.
+      try {
+        const threads = await listProjectThreads({ cwd: projectRoot });
+        jsonResponse(res, 200, {
+          threads,
+          pinned: readPinnedThread(projectRoot),
+          presets: describePresets(await readCodexPromptState())
+        });
+      } catch (error) {
+        jsonResponse(res, 502, { error: error.message, presets: describePresets(await readCodexPromptState()) });
+      }
+      return;
+    }
+
+    if (reqPath === "/api/codex/pin" && req.method === "POST") {
+      const body = req.headers["content-length"] ? JSON.parse(await readBody(req)) : {};
+      const threadId = typeof body.threadId === "string" ? body.threadId.trim() : "";
+      writePinnedThread(projectRoot, threadId);
+      jsonResponse(res, 200, { pinned: readPinnedThread(projectRoot) });
+      return;
+    }
+
+    if (reqPath === "/api/codex/run" && req.method === "POST") {
+      const body = req.headers["content-length"] ? JSON.parse(await readBody(req)) : {};
+      // `fresh` forces a new conversation; otherwise an explicit id wins over the pinned one, and
+      // the pinned one is only a default so the usual click keeps landing where the user works.
+      const wanted = body.fresh === true
+        ? ""
+        : (typeof body.threadId === "string" && body.threadId.trim()) || readPinnedThread(projectRoot);
+
+      let prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+      if (!prompt) {
+        const { prompt: built, blocked } = buildPresetPrompt(body.preset || "open", await readCodexPromptState());
+        // A preset with nothing to say must not spend a turn; the reason is more useful than a run.
+        if (blocked) {
+          jsonResponse(res, 409, { error: blocked });
+          return;
+        }
+        prompt = built;
+      }
+
+      // Lets the prompt be inspected (and tested) without spending a turn on the model.
+      if (body.dryRun === true) {
+        jsonResponse(res, 200, { dryRun: true, preset: body.preset || "open", prompt, threadId: wanted || null });
+        return;
+      }
+
+      try {
+        const { threadId, turnId, resumed } = await startCodexTurn({ prompt, cwd: projectRoot, threadId: wanted });
+        writePinnedThread(projectRoot, threadId);
+        if (body.open !== false) openInCodex(threadId);
+        jsonResponse(res, 200, { threadId, turnId, resumed, prompt, deepLink: threadDeepLink(threadId) });
+      } catch (error) {
+        jsonResponse(res, 502, { error: error.message, threadId: error.threadId || null });
+      }
       return;
     }
 

@@ -11,7 +11,8 @@ Registered for Codex via `[mcp_servers.task_tree]` in `~/.codex/config.toml`, an
 - Read focus with `task_tree_focus`; read one node with `task_tree_node`.
 - Write with `task_tree_write` (field-level). It backs up, enforces the compact gate, syncs flow status, and refuses `GraphState.Current/Next/NextPlan` — so focus stays the user's call.
 - `task_tree_chain` advances one chain step; `task_tree_flow_status` reports flow drift; `task_tree_check_compact` runs the gate; `task_tree_layout` re-arranges the canvas; `task_tree_knowledge` searches the local index.
-- The Agent cannot see the UI. `task_tree_server open` only pops the window on the user's desktop.
+- When the user wants to *work with* the graph, `task_tree_open` embeds the real UI in the chat (MCP Apps widget): dragging, editing, flow view, knowledge panel. When they only want a look, `task_tree_render` returns a picture. Both are for the user's eyes — read data with the other tools.
+- `task_tree_server open` pops the UI on the user's desktop; use it when the host cannot render widgets.
 - If a tool call fails, fall back to the file rules below and say so.
 
 **Compact current-state rule**

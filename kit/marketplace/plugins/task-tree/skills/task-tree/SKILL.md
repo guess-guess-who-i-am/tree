@@ -1,6 +1,6 @@
 ---
 name: task-tree
-description: 用 task_tree_* 工具读写项目任务图：读焦点、按字段写树（自动备份+精炼门禁）、链式推进一步、检索本地知识库、多模型协作、自动整理画布。当用户提到任务图/任务树/节点/焦点/下一步/链式/自动整理时使用。
+description: 用 task_tree_* 工具读写项目任务图：把整张图画进对话、读焦点、按字段写树（自动备份+精炼门禁）、链式推进一步、检索本地知识库、多模型协作、自动整理画布。当用户提到任务图/任务树/节点/焦点/下一步/链式/自动整理，或想看图、让你画出来时使用。
 ---
 
 # 任务图（task-tree）
@@ -26,6 +26,8 @@ description: 用 task_tree_* 工具读写项目任务图：读焦点、按字段
 
 - `task_tree_focus`：活动树、`Current`/`Next`、Next 节点的 `NextIdea` 与完成度。
 - `task_tree_node`：按 ID 读节点全字段。
+- `task_tree_open`：把**可交互的任务图界面**嵌进对话——就是那个网页本身，用户能拖节点、改字段、切执行流程、查知识库。用户说"打开任务图 / 我要自己操作 / 在这里编辑"时用它。
+- `task_tree_render`：把整张图截成图片返回。用户只想看一眼不动手时用它（"画出来 / 现在长什么样"），别改用文字罗列节点。树很大字太小就把 `scale` 调到 2。
 - `task_tree_check_compact`：字段预算 + 长行门禁。
 - `task_tree_flow_status`：`scripts/project.json` 的块顺序、状态与漂移。
 
@@ -48,5 +50,7 @@ description: 用 task_tree_* 工具读写项目任务图：读焦点、按字段
 ## 边界
 
 - 焦点（`Current` / `Next` / `NextPlan`）只由用户在界面里定；Agent 写树不会改动它。
-- 界面是给人看的，模型不能"看"网页：需要什么信息就调对应工具，不要试图截图或解析页面。
+- `task_tree_open` 和 `task_tree_render` 都是给**用户的眼睛**用的：不管界面还是图片，你自己要读数据还是得调 `task_tree_focus` / `task_tree_node`。
+- `task_tree_open` 依赖宿主支持 MCP Apps（Codex 桌面端需要 `features.enable_mcp_apps = true`）。界面没出来就退回 `task_tree_render` 出图，或 `task_tree_server action=open` 在桌面打开。
+- 除了这两个，不要自己想办法截图或解析页面：需要什么信息就调对应工具。
 - 门禁不过就不能收工：字段超预算说明这一轮的表述还不够收敛。

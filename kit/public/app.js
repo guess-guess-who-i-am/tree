@@ -11,6 +11,23 @@ const LEFT_PANE_WIDTH_STORAGE_KEY = "taskTree.leftPaneWidth";
 const LEFT_PANE_MIN_WIDTH = 260;
 const LEFT_PANE_MAX_WIDTH = 960;
 const USER_GRAPH_STATE_STORAGE_KEY = "taskTree.userGraphState";
+/** Set by task_tree_render, which screenshots this page to show the graph inside a chat. */
+const snapshotMode = new URLSearchParams(window.location.search).get("snapshot") === "1";
+/** Set by task_tree_open, which embeds this page as an interactive widget inside a chat. */
+const embedMode = new URLSearchParams(window.location.search).get("embed") === "1";
+
+/**
+ * Tells the embedding widget the frame really loaded.
+ *
+ * A blocked subframe and an unreachable port both look like an empty box from the outside, so
+ * silence is the only signal the widget can act on.
+ */
+function signalEmbedHost(stage) {
+  if (!embedMode || window.parent === window) return;
+  window.parent.postMessage({ type: "task-tree-embed-ready", stage }, "*");
+}
+
+signalEmbedHost("loaded");
 const nodeFieldLabels = {
   Position: "position",
   Size: "size",
@@ -149,6 +166,9 @@ const els = {
   fitViewBtn: document.querySelector("#fitViewBtn"),
   saveBtn: document.querySelector("#saveBtn"),
   reloadBtn: document.querySelector("#reloadBtn"),
+  openInCodexBtn: document.querySelector("#openInCodexBtn"),
+  codexThreadsBtn: document.querySelector("#codexThreadsBtn"),
+  codexThreadMenu: document.querySelector("#codexThreadMenu"),
   shutdownBtn: document.querySelector("#shutdownBtn"),
   knowledgeState: document.querySelector("#knowledgeState"),
   kbEnvInfo: document.querySelector("#kbEnvInfo"),
@@ -190,6 +210,10 @@ const els = {
   chainLoopCmdBar: document.querySelector("#chainLoopCmdBar"),
   chainLoopCmdText: document.querySelector("#chainLoopCmdText"),
   chainLoopCmdCopyBtn: document.querySelector("#chainLoopCmdCopyBtn"),
+  chainRunBtn: document.querySelector("#chainRunBtn"),
+  projectSwitchBtn: document.querySelector("#projectSwitchBtn"),
+  projectSwitchName: document.querySelector("#projectSwitchName"),
+  projectMenu: document.querySelector("#projectMenu"),
   workspaceBanner: document.querySelector("#workspaceBanner"),
   workspaceBannerTitle: document.querySelector("#workspaceBannerTitle"),
   workspaceBannerExitBtn: document.querySelector("#workspaceBannerExitBtn"),
@@ -2074,6 +2098,11 @@ async function probeBackendConnection() {
     if (!response.ok) {
       setSaveState(formatApiFetchError(null, response, "后台连接"));
       return false;
+    }
+    const project = await response.json();
+    if (els.projectSwitchName && project.name) {
+      els.projectSwitchName.textContent = project.name;
+      els.projectSwitchBtn?.setAttribute("title", `${project.root} · 点这里切到本机其它任务图项目`);
     }
     return true;
   } catch (error) {
@@ -4971,6 +5000,21 @@ function fitGraphToViewport(padding = 48) {
   applyGraphTransform();
 }
 
+/**
+ * Renders once for a screenshot: give the canvas the whole window and fit the graph into it.
+ *
+ * Padding is tighter than the interactive default because the capture is cropped to the viewport,
+ * so every unused pixel is wasted space in the chat.
+ */
+async function enterSnapshotMode() {
+  document.body.classList.add("snapshotMode");
+  await waitNextFrame(2);
+  fitGraphToViewport(28);
+  await waitNextFrame(2);
+  document.title = "task-tree-snapshot-ready";
+  window.__taskTreeSnapshotReady = true;
+}
+
 function applyGraphTransform() {
   els.graphCanvas.style.transform = `translate(${graphView.x}px, ${graphView.y}px) scale(${graphView.scale})`;
 }
@@ -5331,6 +5375,239 @@ els.filePreviewClose?.addEventListener("click", () => els.filePreviewDialog?.clo
 els.filePreviewDialog?.addEventListener("click", (event) => {
   if (event.target === els.filePreviewDialog) els.filePreviewDialog.close();
 });
+function closeCodexThreadMenu() {
+  els.codexThreadMenu?.classList.add("hidden");
+  els.codexThreadsBtn?.setAttribute("aria-expanded", "false");
+}
+
+async function runCodex(body = {}) {
+  closeCodexThreadMenu();
+  const buttons = [els.openInCodexBtn, els.codexThreadsBtn, els.chainRunBtn].filter(Boolean);
+  for (const button of buttons) button.disabled = true;
+  setSaveState("正在发给 Codex...");
+  try {
+    const res = await fetch("/api/codex/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`);
+    setSaveState(payload.resumed ? "已发到原来那条会话，切过去接着做" : "已新开一条会话，切过去就能看到");
+  } catch (error) {
+    setSaveState(`Codex 没能启动: ${error.message}`);
+  } finally {
+    for (const button of buttons) button.disabled = false;
+  }
+}
+
+/** Switching the target is free; only the send section spends a model turn. */
+async function pinCodexThread(threadId) {
+  try {
+    await fetch("/api/codex/pin", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ threadId })
+    });
+    setSaveState(threadId ? "下次发送会发到这条会话" : "下次发送会新开一条会话");
+  } catch (error) {
+    setSaveState(`换会话失败: ${error.message}`);
+  }
+  await openCodexThreadMenu();
+}
+
+function codexMenuGroup(title) {
+  const label = document.createElement("p");
+  label.className = "codexThreadGroup";
+  label.textContent = title;
+  return label;
+}
+
+function renderCodexThreadMenu({ threads = [], pinned = "", presets = [] } = {}) {
+  const menu = els.codexThreadMenu;
+  menu.textContent = "";
+  menu.append(codexMenuGroup("发什么（发到下面选中的会话）"));
+
+  for (const preset of presets) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "codexThreadItem";
+    item.append(document.createTextNode(preset.label));
+    if (preset.blocked || preset.hint) {
+      const meta = document.createElement("span");
+      meta.className = "codexThreadMeta";
+      meta.textContent = preset.blocked || preset.hint;
+      item.append(meta);
+    }
+    if (preset.blocked) {
+      item.disabled = true;
+      item.classList.add("blocked");
+    } else {
+      item.addEventListener("click", () => runCodex({ preset: preset.id }));
+    }
+    menu.append(item);
+  }
+
+  menu.append(document.createElement("hr"), codexMenuGroup("发到哪"));
+
+  const fresh = document.createElement("button");
+  fresh.type = "button";
+  fresh.className = pinned ? "codexThreadItem" : "codexThreadItem current";
+  fresh.textContent = `${pinned ? "" : "● "}＋ 新开一条会话`;
+  fresh.addEventListener("click", () => pinCodexThread(""));
+  menu.append(fresh);
+
+  for (const thread of threads) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = thread.id === pinned ? "codexThreadItem current" : "codexThreadItem";
+
+    // One line per conversation: several turns of the same prompt look like one wall of text
+    // when they are allowed to wrap, and then the list is unreadable exactly when it is longest.
+    const title = document.createElement("span");
+    title.className = "codexThreadTitle";
+    title.textContent = `${thread.id === pinned ? "● " : ""}${thread.name || thread.preview || thread.id.slice(0, 8)}`;
+    item.append(title);
+
+    const meta = document.createElement("span");
+    meta.className = "codexThreadMeta";
+    const when = thread.updatedAt ? new Date(thread.updatedAt * 1000).toLocaleString() : "";
+    meta.textContent = [when, thread.name ? thread.preview : ""].filter(Boolean).join(" · ");
+    item.append(meta);
+
+    item.addEventListener("click", () => pinCodexThread(thread.id));
+    menu.append(item);
+  }
+
+  if (!threads.length) {
+    const empty = document.createElement("p");
+    empty.className = "codexThreadEmpty";
+    empty.textContent = "这个项目还没有 Codex 会话";
+    menu.append(empty);
+  }
+}
+
+async function openCodexThreadMenu() {
+  els.codexThreadMenu.classList.remove("hidden");
+  els.codexThreadsBtn.setAttribute("aria-expanded", "true");
+  els.codexThreadMenu.innerHTML = "<p class=\"codexThreadEmpty\">正在读取会话...</p>";
+  try {
+    const res = await fetch("/api/codex/threads");
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`);
+    renderCodexThreadMenu(payload);
+  } catch (error) {
+    els.codexThreadMenu.innerHTML = "";
+    const failed = document.createElement("p");
+    failed.className = "codexThreadEmpty";
+    failed.textContent = `读不到会话列表: ${error.message}`;
+    els.codexThreadMenu.append(failed);
+  }
+}
+
+els.openInCodexBtn?.addEventListener("click", () => runCodex({ preset: "open" }));
+
+// The loop used to mean "copy this command, switch to Codex, paste, press enter". Now that the
+// page can start a turn itself, the chain bar spends that same turn on one click.
+els.chainRunBtn?.addEventListener("click", () => runCodex({ preset: "chain" }));
+
+function closeProjectMenu() {
+  els.projectMenu?.classList.add("hidden");
+  els.projectSwitchBtn?.setAttribute("aria-expanded", "false");
+}
+
+/**
+ * Every project has its own server on its own fixed port, so switching means starting that one
+ * (if it is asleep) and moving this window there. Its tree, its chain and its Codex conversation
+ * all come with it, because they live in that project, not in this window.
+ */
+async function switchProject(root, name) {
+  closeProjectMenu();
+  setSaveState(`正在打开 ${name}...`);
+  try {
+    const res = await fetch("/api/projects/open", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ root })
+    });
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`);
+    window.location.href = payload.url;
+  } catch (error) {
+    setSaveState(`打不开 ${name}: ${error.message}`);
+  }
+}
+
+function renderProjectMenu({ projects = [] } = {}) {
+  const menu = els.projectMenu;
+  menu.textContent = "";
+  if (!projects.length) {
+    const empty = document.createElement("p");
+    empty.className = "codexThreadEmpty";
+    empty.textContent = "本机还没有别的任务图项目";
+    menu.append(empty);
+    return;
+  }
+
+  for (const project of projects) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = project.current ? "projectItem current" : "projectItem";
+    item.append(document.createTextNode(`${project.current ? "● " : ""}${project.name}`));
+
+    const meta = document.createElement("span");
+    meta.className = "codexThreadMeta";
+    meta.textContent = `${project.root} · :${project.port}`;
+    item.append(meta);
+
+    if (project.current) item.disabled = true;
+    else item.addEventListener("click", () => switchProject(project.root, project.name));
+    menu.append(item);
+  }
+}
+
+async function openProjectMenu() {
+  els.projectMenu.classList.remove("hidden");
+  els.projectSwitchBtn.setAttribute("aria-expanded", "true");
+  els.projectMenu.innerHTML = "<p class=\"codexThreadEmpty\">正在读取项目...</p>";
+  try {
+    const res = await fetch("/api/projects");
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`);
+    renderProjectMenu(payload);
+  } catch (error) {
+    els.projectMenu.innerHTML = "";
+    const failed = document.createElement("p");
+    failed.className = "codexThreadEmpty";
+    failed.textContent = `读不到项目列表: ${error.message}`;
+    els.projectMenu.append(failed);
+  }
+}
+
+els.projectSwitchBtn?.addEventListener("click", () => {
+  if (els.projectMenu.classList.contains("hidden")) openProjectMenu();
+  else closeProjectMenu();
+});
+
+els.codexThreadsBtn?.addEventListener("click", () => {
+  if (els.codexThreadMenu.classList.contains("hidden")) openCodexThreadMenu();
+  else closeCodexThreadMenu();
+});
+
+document.addEventListener("click", (event) => {
+  if (!els.codexThreadMenu?.classList.contains("hidden") && !event.target.closest(".codexLaunch")) {
+    closeCodexThreadMenu();
+  }
+  if (!els.projectMenu?.classList.contains("hidden") && !event.target.closest(".projectSwitch")) {
+    closeProjectMenu();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  closeCodexThreadMenu();
+  closeProjectMenu();
+});
 els.shutdownBtn?.addEventListener("click", async () => {
   if (dirty) {
     setSaveState("请先保存再关闭后台");
@@ -5611,14 +5888,19 @@ async function exportFlowSvgFile() {
 }
 
 loadTreeRegistryState()
-  .then(() => loadTree({ registryLoaded: true }))
+  .then(() => loadTree({ registryLoaded: true, fitView: snapshotMode || embedMode }))
+  .then(() => (snapshotMode ? enterSnapshotMode() : signalEmbedHost("rendered")))
   .catch((error) => setSaveState(formatApiFetchError(error, null, "加载任务图")));
-reloadTimer = setInterval(() => {
-  pollTreeChanges().catch(() => {});
-}, 1400);
-setInterval(() => {
-  probeBackendConnection().catch(() => {});
-}, 12000);
-setInterval(() => {
-  loadMaintenanceStatus().catch(() => {});
-}, 15000);
+
+// Snapshot mode renders once for a screenshot; polling would only repaint under the camera.
+if (!snapshotMode) {
+  reloadTimer = setInterval(() => {
+    pollTreeChanges().catch(() => {});
+  }, 1400);
+  setInterval(() => {
+    probeBackendConnection().catch(() => {});
+  }, 12000);
+  setInterval(() => {
+    loadMaintenanceStatus().catch(() => {});
+  }, 15000);
+}

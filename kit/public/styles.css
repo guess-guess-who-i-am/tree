@@ -283,6 +283,27 @@ h1 {
   line-height: 1.35;
 }
 
+.chainRunBtn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chainRunBtn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.chainRunBtn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 .chainLoopCmdCopyBtn {
   flex-shrink: 0;
   padding: 4px 10px;
@@ -1640,6 +1661,210 @@ button.chainAddBtn.active {
   border-color: var(--accent);
   color: var(--accent);
   background: rgba(23, 107, 91, 0.08);
+}
+
+.codexLaunch {
+  position: relative;
+  display: inline-flex;
+  gap: 2px;
+}
+
+.openInCodexBtn {
+  min-width: 56px;
+}
+
+.openInCodexBtn:disabled,
+.codexThreadsBtn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.codexThreadsBtn {
+  min-width: 22px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.codexThreadMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 300px;
+  max-width: 420px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+}
+
+.codexThreadMenu.hidden {
+  display: none;
+}
+
+/* Scoped under the menu on purpose: `.toolbar button` pins every toolbar button to 38x38, and a
+   bare `.codexThreadItem` loses to it, which squeezes each entry into one character per line. */
+.codexThreadMenu .codexThreadItem {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  line-height: 1.45;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.codexThreadMenu .codexThreadItem:hover {
+  background: rgba(23, 107, 91, 0.09);
+  border-color: transparent;
+}
+
+.codexThreadMenu .codexThreadItem.current {
+  color: var(--accent);
+}
+
+.codexThreadMenu .codexThreadTitle {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.codexThreadMenu .codexThreadItem .codexThreadMeta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.codexThreadMenu hr {
+  margin: 5px 2px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.codexThreadEmpty {
+  padding: 7px 9px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.codexThreadGroup {
+  margin: 2px 0 4px;
+  padding: 0 9px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.projectSwitch {
+  position: relative;
+  display: inline-flex;
+}
+
+.projectSwitchBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 200px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.projectSwitchBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.projectSwitchBtn > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectSwitchCaret {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.projectMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 320px;
+  max-width: 520px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+}
+
+.projectMenu.hidden {
+  display: none;
+}
+
+.projectMenu .projectItem {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.projectMenu .projectItem:hover {
+  background: rgba(23, 107, 91, 0.09);
+}
+
+.projectMenu .projectItem.current {
+  color: var(--accent);
+  cursor: default;
+}
+
+.projectMenu .projectItem .codexThreadMeta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  direction: rtl;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.codexThreadMenu .codexThreadItem.blocked {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.codexThreadMenu .codexThreadItem.blocked:hover {
+  background: transparent;
 }
 
 .completionBadge {
@@ -3424,4 +3649,59 @@ textarea:focus {
   .grid.two {
     grid-template-columns: 1fr;
   }
+}
+
+/*
+ * Snapshot mode (`?snapshot=1`): the page is about to be screenshotted for a chat, so the graph
+ * gets the whole window and every piece of chrome that only makes sense to a live user goes away.
+ */
+body.snapshotMode .topbar,
+body.snapshotMode .knowledgePane,
+body.snapshotMode .versionPane,
+body.snapshotMode .paneResizeHandle,
+body.snapshotMode .paneEdgeToggle,
+body.snapshotMode .graphPane > .paneHeader,
+body.snapshotMode .chainLoopCmdBar,
+body.snapshotMode .chainDock,
+body.snapshotMode .workspaceBanner,
+body.snapshotMode .floatingPanel {
+  display: none !important;
+}
+
+/*
+ * Everything behind the graph stays transparent so the capture can be cropped to the drawing
+ * itself; the caller paints a background back in. Without this the image is always window-shaped
+ * and a wide, short tree wastes half the picture on empty canvas.
+ */
+body.snapshotMode,
+body.snapshotMode #app,
+body.snapshotMode .layout,
+body.snapshotMode .graphPane,
+body.snapshotMode .graphViewport,
+body.snapshotMode .graphCanvas {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+body.snapshotMode .layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  transition: none;
+}
+
+body.snapshotMode .graphPane {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body.snapshotMode .graphViewport {
+  height: 100%;
+}
+
+/* Nothing should animate while the camera is open. */
+body.snapshotMode * {
+  transition: none !important;
+  animation: none !important;
 }

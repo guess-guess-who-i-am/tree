@@ -23,6 +23,8 @@ import { locateProjectRoot } from "../server/turn-tracker.js";
 import { findTree, loadTreeRegistry, resolveTreeFile } from "../server/tree-registry.js";
 import { inspectTreeFile, inspectTreeMarkdown, isTreeMarkdownPath, parseTreeNodeFields } from "../server/tree-quality.js";
 import { buildExecutionCatalog, computeFlowDrift, getFlowScript } from "../server/flow-script.js";
+import { renderGraphPng } from "../server/graph-render.js";
+import { WIDGET_META, WIDGET_MIME, WIDGET_URI, widgetHtml } from "../server/graph-widget.js";
 
 const SERVER_NAME = "llm-task-tree";
 const SERVER_VERSION = "0.2.0";
@@ -112,7 +114,7 @@ async function candidatePorts() {
     if (!existsSync(file)) continue;
     ports.push(...readPortList(await readFile(file, "utf8")));
   }
-  ports.push(5177);
+  ports.push(stablePort(), 5177);
   return [...new Set(ports)];
 }
 
@@ -138,15 +140,40 @@ async function findLivePort() {
   return null;
 }
 
-function freePort() {
+function freePort(preferred = 0) {
   return new Promise((resolve, reject) => {
     const probe = net.createServer();
     probe.on("error", reject);
-    probe.listen(0, HOST, () => {
+    probe.listen(preferred, HOST, () => {
       const { port } = probe.address();
       probe.close(() => resolve(port));
     });
   });
+}
+
+/**
+ * The same project should come back on the same URL every time.
+ *
+ * People bookmark this address in the desktop app's browser pane, and a bookmark that dies on
+ * every restart is worse than no bookmark. The port is derived from the project root so two
+ * projects on one machine land on different numbers without coordinating, inside the private
+ * range above the 5177 the standalone launcher uses.
+ */
+function stablePort() {
+  let hash = 0;
+  for (const char of path.resolve(projectRoot).toLowerCase()) {
+    hash = (hash * 31 + char.charCodeAt(0)) % 100000;
+  }
+  return 5178 + (hash % 800);
+}
+
+/** Prefers this project's stable port, but never fails over it being taken. */
+async function claimPort() {
+  try {
+    return await freePort(stablePort());
+  } catch {
+    return freePort();
+  }
 }
 
 async function kitDir() {
@@ -173,7 +200,7 @@ async function rememberPort(port) {
 async function startServer() {
   const kit = await kitDir();
   if (!kit) throw new Error(`找不到任务图运行时（server.js）：检查 ${path.join(stubDir, "task-tree.config.json")}`);
-  const port = await freePort();
+  const port = await claimPort();
   const child = spawn(process.execPath, ["server.js"], {
     cwd: kit,
     env: {
@@ -457,6 +484,62 @@ async function toolServer(args) {
     return { running: false, stopped: true, port: live.port };
   }
   return { error: `未知 action：${action}（可用 status/start/open/stop）` };
+}
+
+async function toolOpen(args) {
+  const { port } = await ensureServer();
+  const tree = String(args?.tree || "").trim();
+  const focus = await toolFocus().catch(() => null);
+  const url = `http://${HOST}:${port}${tree ? `/?tree=${encodeURIComponent(tree)}` : "/"}`;
+
+  return {
+    // The widget renders from the linked ui:// resource; this text is what the model narrates.
+    mcpContent: [{
+      type: "text",
+      text: [
+        `任务图界面已经嵌在下面，可以直接拖节点、改字段、切执行流程视图。`,
+        focus && !focus.error
+          ? `当前 Current ${focus.currentNode?.id || "-"}，Next ${focus.nextNode?.id || "-"}，共 ${focus.nodeCount} 个节点。`
+          : "",
+        `如果这里没显示出界面，说明宿主没开 MCP Apps，用 ${url} 在浏览器里打开同一个界面。`
+      ].filter(Boolean).join("\n")
+    }],
+    mcpMeta: { ui: { resourceUri: WIDGET_URI }, "openai/outputTemplate": WIDGET_URI }
+  };
+}
+
+async function toolRender(args) {
+  const { port } = await ensureServer();
+  const width = clampNumber(args?.width, 900, 2400, 1680);
+  const height = clampNumber(args?.height, 700, 2000, 1050);
+  const scale = clampNumber(args?.scale, 1, 2, 1.5);
+  const tree = String(args?.tree || "").trim();
+
+  const shot = await renderGraphPng({ url: `http://${HOST}:${port}`, width, height, scale, tree });
+  const focus = await toolFocus().catch(() => null);
+  const label = (node) => (node ? `${node.id} ${node.title}` : "-");
+  const caption = focus && !focus.error
+    ? [
+      `任务图：${focus.activeTree?.title || focus.activeTree?.id || "活动方法树"}（${focus.nodeCount} 个节点）`,
+      `Current ${label(focus.currentNode)}`,
+      `Next ${label(focus.nextNode)}`
+    ].join("\n")
+    : "任务图";
+
+  return {
+    // Image first: older Codex builds only picked up the image when no text preceded it.
+    // No structuredContent either — Codex drops content[] when it is present (openai/codex#10334).
+    mcpContent: [
+      { type: "image", data: shot.png.toString("base64"), mimeType: "image/png" },
+      { type: "text", text: `${caption}\n${shot.width}x${shot.height}px，与界面同一份渲染。要交互（拖拽/编辑/知识库）用 task_tree_server action=open。` }
+    ]
+  };
+}
+
+function clampNumber(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
 }
 
 async function toolWrite(args) {
@@ -1002,6 +1085,21 @@ const TOOLS = [
     handler: toolLayout
   },
   {
+    name: "task_tree_render",
+    description: "把整张任务图截成图片直接返回，用户在对话里就能看到完整的树（节点卡片、连线、Current/Next 高亮），不用打开浏览器。用户说“看一眼任务图 / 画出来 / 现在长什么样”时用它。截的是界面本身，所以和网页完全一致。只读，不改树。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tree: { type: "string", description: "要截的方法树 ID，留空用当前活动树" },
+        width: { type: "number", description: "画布宽度像素，默认 1680" },
+        height: { type: "number", description: "画布高度像素，默认 1050" },
+        scale: { type: "number", description: "渲染倍率 1~2，默认 1.5；树很大、字太小时调到 2" }
+      },
+      additionalProperties: false
+    },
+    handler: toolRender
+  },
+  {
     name: "task_tree_server",
     description: "本地任务图服务与界面：status 查是否在跑、start 无界面拉起、open 在用户桌面打开任务图界面（关系图/执行流程/知识库面板都在里面）、stop 关掉。其他工具需要服务时会自动 start，一般不用手动调。",
     inputSchema: {
@@ -1010,6 +1108,22 @@ const TOOLS = [
       additionalProperties: false
     },
     handler: toolServer
+  },
+  {
+    name: "task_tree_open",
+    description: "在对话里打开可交互的任务图界面：直接嵌入本地网页界面本身，能拖节点、改字段、看执行流程和知识库，和浏览器里完全一样。用户说“打开任务图 / 我要自己操作 / 在这里编辑”时用它。只想看一眼不动手就用 task_tree_render。",
+    inputSchema: {
+      type: "object",
+      properties: { tree: { type: "string", description: "要打开的方法树 ID，留空用当前活动树" } },
+      additionalProperties: false
+    },
+    // The host turns a tool into a widget by following this link to the ui:// resource.
+    // Both spellings are sent: the MCP Apps key, and the Apps SDK one older hosts still read.
+    meta: {
+      ui: { resourceUri: WIDGET_URI },
+      "openai/outputTemplate": WIDGET_URI
+    },
+    handler: toolOpen
   }
 ];
 
@@ -1035,7 +1149,8 @@ async function handleMessage(message) {
     const requested = String(params?.protocolVersion || "");
     respond(id, {
       protocolVersion: SUPPORTED_PROTOCOLS.includes(requested) ? requested : SUPPORTED_PROTOCOLS[0],
-      capabilities: { tools: { listChanged: false } },
+      // Resources exist for one reason: the widget bundle behind task_tree_open.
+      capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
       instructions: `任务图工具。先 task_tree_focus 取焦点；改树用 task_tree_write（自带备份和精炼门禁）；链式推进用 task_tree_chain。${NEXT_PLAN_WARNING}`
     });
@@ -1048,12 +1163,41 @@ async function handleMessage(message) {
   }
   if (method === "tools/list") {
     respond(id, {
-      tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }))
+      tools: TOOLS.map(({ name, description, inputSchema, meta }) => (
+        meta ? { name, description, inputSchema, _meta: meta } : { name, description, inputSchema }
+      ))
     });
     return;
   }
   if (method === "resources/list") {
-    respond(id, { resources: [] });
+    respond(id, {
+      resources: [{
+        uri: WIDGET_URI,
+        name: "任务图界面",
+        description: "嵌在对话里的可交互任务图：拖节点、改字段、看执行流程与知识库。",
+        mimeType: WIDGET_MIME,
+        _meta: WIDGET_META
+      }]
+    });
+    return;
+  }
+  if (method === "resources/read") {
+    const uri = String(params?.uri || "");
+    if (uri !== WIDGET_URI) {
+      respondError(id, -32602, `未知资源：${uri}`);
+      return;
+    }
+    try {
+      // Read time is the first moment the port is known, so the frame url is built here rather
+      // than baked into a static bundle.
+      const { port } = await ensureServer();
+      respond(id, {
+        contents: [{ uri, mimeType: WIDGET_MIME, text: widgetHtml({ port, host: HOST }), _meta: WIDGET_META }],
+        _meta: WIDGET_META
+      });
+    } catch (error) {
+      respondError(id, -32603, `无法准备任务图界面：${error?.message || error}`);
+    }
     return;
   }
   if (method === "prompts/list") {
@@ -1068,10 +1212,16 @@ async function handleMessage(message) {
     }
     try {
       const payload = await tool.handler(params?.arguments || {});
-      respond(id, {
-        content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+      // A handler that has something other than JSON to say (an image, say) builds its own blocks.
+      // structuredContent is deliberately never sent: Codex drops content[] when it is present.
+      const result = {
+        content: Array.isArray(payload?.mcpContent)
+          ? payload.mcpContent
+          : [{ type: "text", text: JSON.stringify(payload, null, 2) }],
         isError: Boolean(payload?.error)
-      });
+      };
+      if (payload?.mcpMeta) result._meta = payload.mcpMeta;
+      respond(id, result);
     } catch (error) {
       respond(id, {
         content: [{ type: "text", text: `工具 ${tool.name} 失败：${error?.message || error}` }],

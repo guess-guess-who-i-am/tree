@@ -18,6 +18,12 @@
             <h1>LLM Task Tree</h1>
             <p id="subtitle">Markdown-backed shared task memory</p>
           </div>
+          <div class="projectSwitch">
+            <button id="projectSwitchBtn" type="button" class="projectSwitchBtn" title="切到本机其它装过任务图的项目；每个项目有自己固定的地址和自己的 Codex 会话" aria-haspopup="menu" aria-expanded="false">
+              <span id="projectSwitchName">项目</span><span class="projectSwitchCaret">▾</span>
+            </button>
+            <div id="projectMenu" class="projectMenu hidden" role="menu" aria-label="切换项目"></div>
+          </div>
           <div class="treeSwitcher" aria-label="任务树选择">
             <label for="treeSelect">当前树</label>
             <select id="treeSelect" title="切换背景树、方法树或其它独立任务树"></select>
@@ -38,6 +44,11 @@
           <button id="fitViewBtn" title="Fit view">⛶</button>
           <button id="saveBtn" title="Save to task-tree.md">💾</button>
           <button id="reloadBtn" title="Reload Markdown">↻</button>
+          <span class="codexLaunch">
+            <button id="openInCodexBtn" type="button" class="openInCodexBtn" title="把可交互任务图发进 Codex 桌面端，自动跑一轮，不用按回车。默认续用本项目上次那条会话">Codex</button>
+            <button id="codexThreadsBtn" type="button" class="codexThreadsBtn" title="换一条会话，或新开一条" aria-haspopup="menu" aria-expanded="false">▾</button>
+            <div id="codexThreadMenu" class="codexThreadMenu hidden" role="menu" aria-label="选择 Codex 会话"></div>
+          </span>
           <button id="shutdownBtn" title="关闭后台服务">⏻</button>
         </div>
       </header>
@@ -160,9 +171,10 @@
       </main>
 
       <div id="chainLoopCmdBar" class="chainLoopCmdBar hidden" aria-label="Codex loop 命令">
-        <span class="chainLoopCmdLabel">Loop 命令</span>
+        <span class="chainLoopCmdLabel">链式循环</span>
+        <button type="button" id="chainRunBtn" class="chainRunBtn" title="直接发给 Codex 桌面端：按 chain-step 算出的单步提示跑一轮，不用复制命令">▶ 直接开跑</button>
         <code id="chainLoopCmdText" class="chainLoopCmdText"></code>
-        <button type="button" id="chainLoopCmdCopyBtn" class="chainLoopCmdCopyBtn" title="复制 loop 命令">复制</button>
+        <button type="button" id="chainLoopCmdCopyBtn" class="chainLoopCmdCopyBtn" title="复制 loop 命令，给 Cursor 或别的 Agent 用">复制</button>
       </div>
       <footer class="chainDock" aria-label="Agent 执行链">
         <span class="chainDockLabel">执行链</span>

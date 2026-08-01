@@ -25,7 +25,34 @@ $KnownPortsFile = Join-Path $ProjectRoot ".task-tree-ports"
 
 Register-TaskTreeProject -ProjectRoot $ProjectRoot
 
+# Same derivation as stablePort() in scripts/mcp-server.mjs, so this launcher and the MCP tools
+# agree on one address per project. A bookmark or a URL typed into the desktop app's browser pane
+# only survives restarts if both entry points land on the same number.
+function Get-StableProjectPort {
+  $normalized = [System.IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\').ToLowerInvariant()
+  $hash = 0
+  foreach ($char in $normalized.ToCharArray()) {
+    $hash = ($hash * 31 + [int]$char) % 100000
+  }
+  return 5178 + ($hash % 800)
+}
+
+function Test-PortFree {
+  param([int]$Port)
+  try {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+    $listener.Start()
+    $listener.Stop()
+    return $true
+  } catch {
+    return $false
+  }
+}
+
 function Get-FreePort {
+  $stable = Get-StableProjectPort
+  if (Test-PortFree -Port $stable) { return $stable }
+
   $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
   $listener.Start()
   try {
@@ -246,7 +273,8 @@ function Get-CandidateProjectPorts {
       if ([int]::TryParse($_.Trim(), [ref]$value) -and $value) { $value }
     }
   }
-  # server.js default when started via npm start in project root
+  # This project's fixed address, then server.js's default when started via npm start.
+  $ports += Get-StableProjectPort
   $ports += 5177
   return $ports | Where-Object { $_ -gt 0 -and $_ -lt 65536 } | Select-Object -Unique
 }

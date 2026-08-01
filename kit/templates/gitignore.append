@@ -1,5 +1,6 @@
 .task-tree-port
 .task-tree-ports
+.task-tree-thread
 .env
 model-agents.json
 model-agent-history.json

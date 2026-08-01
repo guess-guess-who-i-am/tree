@@ -14,6 +14,10 @@ powershell -File <kit>\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseShar
 
 这一步会写好：`task-tree.md`、`AGENTS.md`（含任务图协议块 + MCP 工具优先规则）、`scripts/`、`.cursor/rules/*.mdc`、`.cursor/mcp.json`、`llm-task-tree/` stub（含 `mcp-server.mjs`）。
 
+`task_tree_open`（把可交互界面嵌进对话）要求宿主支持 MCP Apps：目前只有 ChatGPT 桌面应用有这个渲染层，且 `[features]` 里要开 `enable_mcp_apps`。IDE 扩展和 CLI 没有界面层，这个工具会退回给一个本地地址。
+
+`task_tree_render`（把整张图截进对话）多一个前提：机器上要有 Chromium 内核浏览器。Windows 自带 Edge 就够，macOS / Linux 装了 Chrome 或 Chromium 也行，都没有就设环境变量 `TASK_TREE_CHROME` 指向可执行文件。缺了只影响这一个工具，其余工具照常。
+
 ## 路径 1：Cursor —— 随仓库分发，对方零配置
 
 `.cursor/mcp.json` 用 `${workspaceFolder}` 写死相对入口，不含任何本机绝对路径，可以直接提交进仓库：
@@ -30,7 +34,7 @@ powershell -File <kit>\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseShar
 }
 ```
 
-对方克隆仓库、信任工作区，重启 Cursor 即可用上 14 个工具。前提是仓库里带着 `llm-task-tree/` stub 和一份可达的 kit。
+对方克隆仓库、信任工作区，重启 Cursor 即可用上 16 个工具。前提是仓库里带着 `llm-task-tree/` stub 和一份可达的 kit。
 
 ## 路径 2：Codex 桌面端 —— 装 kit 时自动注册（不需要 CLI）
 
@@ -40,7 +44,9 @@ ChatGPT 桌面应用、IDE 扩展（VS Code / Cursor 里的 Codex）和 CLI 读�
 powershell -File kit\deploy-task-tree.ps1 -ProjectRoot <项目路径> -UseSharedKit
 ```
 
-安装末尾会调 `Ensure-CodexRegistration`，往 `config.toml` 写三个块：`[mcp_servers.task_tree]`、`[marketplaces.llm-task-tree]`、`[plugins."task-tree@llm-task-tree"]`。**重启 ChatGPT 桌面应用**后，它会把插件物化到 `~/.codex/plugins/cache/llm-task-tree/task-tree/<版本>/`，Plugins 目录里选来源「任务图（llm-task-tree）」就能看到，14 个工具可用。
+安装末尾会调 `Ensure-CodexRegistration`，往 `config.toml` 写三个块：`[mcp_servers.task_tree]`、`[marketplaces.llm-task-tree]`、`[plugins."task-tree@llm-task-tree"]`，另外在 `[features]` 里补一行 `enable_mcp_apps = true`。**重启 ChatGPT 桌面应用**后，它会把插件物化到 `~/.codex/plugins/cache/llm-task-tree/task-tree/<版本>/`，Plugins 目录里选来源「任务图（llm-task-tree）」就能看到，16 个工具可用。
+
+那行 `enable_mcp_apps` 是嵌入式界面的开关：`task_tree_open` 返回一个 `ui://` 资源，宿主打开这个特性才会把它渲染成沙箱 iframe，里面直接跑本地任务图界面（能拖能改，不是截图）。已有的值不会被改写——如果谁手动关过，得自己改回来。卸载（`--remove`）只会撤掉我们加的那行 `= true`，不动别人的设置。
 
 **分清两个界面**：插件目录只存在于 ChatGPT 桌面应用（Codex 模式，或 ChatGPT 模式打开 Work 开关）。IDE 扩展按官方说明没有插件面板——但 `[mcp_servers.task_tree]` 是全局的，工具在 IDE 扩展和 CLI 里照常可用，只是不出现在"插件列表"这个 UI 里。
 
@@ -81,7 +87,7 @@ README.md
 ## 验证
 
 ```bash
-node scripts/test-share-install.mjs     # 10 例：装到陌生项目、注册到空白 CODEX_HOME、跑通 14 个工具、审计打包后的插件清单
-node scripts/test-mcp-server.mjs        # 22 例：工具行为回归
+node scripts/test-share-install.mjs     # 10 例：装到陌生项目、注册到空白 CODEX_HOME、跑通 16 个工具、审计打包后的插件清单
+node scripts/test-mcp-server.mjs        # 26 例：工具行为回归，含真实截图与 PNG 编解码
 node scripts/test-plugin-manifest.mjs   # 6 例：清单字段、资源尺寸、市场 policy
 ```

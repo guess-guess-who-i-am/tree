@@ -1,7 +1,7 @@
 {
   "name": "task-tree",
-  "version": "0.3.0",
-  "description": "把项目的任务图（关系图 / 执行流程 / 知识库 / 多模型协作）变成 Agent 可直接调用的工具。",
+  "version": "0.6.0",
+  "description": "把项目的任务图（关系图 / 执行流程 / 知识库 / 多模型协作）变成 Agent 可直接调用的工具，并能把可交互的任务图界面直接开在对话里。",
   "author": {
     "name": "llm-task-tree",
     "url": "https://github.com/guess-guess-who-i-am/tree"
@@ -22,20 +22,19 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "任务图",
-    "shortDescription": "读写任务图、链式推进、检索知识库、自动排版",
-    "longDescription": "任务图是人与 Agent 共享的外置记忆：节点保存当前有效结论，GraphState 指定焦点，scripts/project.json 定义执行顺序。装上后，Agent 用 task_tree_* 工具读焦点、按字段写树（自动备份并过精炼门禁）、沿 Chain 推进一步、检索本地 Markdown 知识库、跑多模型协作、自动整理画布，而不是手改 markdown。工具按会话的项目根定位任务图，同一台机器上的多个项目互不干扰。",
+    "shortDescription": "在对话里直接打开可交互的任务图，读写节点、链式推进、检索知识库",
+    "longDescription": "任务图是人与 Agent 共享的外置记忆：节点保存当前有效结论，GraphState 指定焦点，scripts/project.json 定义执行顺序。说一句「打开任务图」，完整界面会嵌在对话里——就是那个网页本身，能拖节点、改字段、切执行流程、查知识库，不用另开浏览器；只想看一眼不动手，就让它「画一张任务图」。除了界面，Agent 还用 task_tree_* 工具读焦点、按字段写树（自动备份并过精炼门禁）、沿 Chain 推进一步、检索本地 Markdown 知识库、跑多模型协作、自动整理画布，而不是手改 markdown。工具按会话的项目根定位任务图，同一台机器上的多个项目互不干扰。",
     "developerName": "llm-task-tree",
     "category": "Productivity",
     "capabilities": [
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/guess-guess-who-i-am/tree",
+    "websiteUrl": "https://github.com/guess-guess-who-i-am/tree",
     "defaultPrompt": [
+      "打开任务图，我要自己拖着看",
       "读一下任务图现在的焦点和下一步",
-      "把这一轮的结论写进当前节点的 CurrentResult",
-      "沿链式推进一步",
-      "在知识库里检索这个问题相关的资料"
+      "把这一轮的结论写进当前节点的 CurrentResult"
     ],
     "brandColor": "#6E56CF",
     "composerIcon": "./assets/icon.png",

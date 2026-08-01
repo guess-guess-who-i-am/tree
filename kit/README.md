@@ -22,7 +22,7 @@ powershell -File .\deploy-task-tree.ps1 -ProjectRoot <你的项目路径> -UseSh
 
 ### 3. 重启客户端
 
-- **ChatGPT 桌面应用**：重启后进 Plugins，来源选「任务图（llm-task-tree）」，插件带图标和四条一键提示词，14 个工具可用。不需要敲任何 codex 命令。
+- **ChatGPT 桌面应用**：重启后进 Plugins，来源选「任务图（llm-task-tree）」，插件带图标和五条一键提示词，15 个工具可用。说一句「看一眼任务图」，整张图直接画在对话里。不需要敲任何 codex 命令。
 - **IDE 扩展（VS Code / Cursor 里的 Codex）**：官方没给插件面板，但工具照样能调——`[mcp_servers.task_tree]` 是全局注册的。
 - **Cursor**：提交仓库里的 `.cursor/mcp.json`（已用 `${workspaceFolder}`，可直接分享），重启生效。
 

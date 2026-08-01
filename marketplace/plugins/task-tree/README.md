@@ -1,8 +1,12 @@
 # 任务图（task-tree）
 
-把项目里的 `task-tree.md` 变成 Agent 可以直接调用的工具：读焦点、按字段写树、链式推进一步、跑执行流程漂移检查、检索本地知识库、自动整理画布。
+把项目里的 `task-tree.md` 变成 Agent 可以直接调用的工具：在对话里直接看整张图、读焦点、按字段写树、链式推进一步、跑执行流程漂移检查、检索本地知识库、自动整理画布。
 
-不是"再教模型一遍协议"，而是让协议变成 14 个 `task_tree_*` 工具：写树自动备份到 `versions/`、自动过精炼门禁、自动同步 `scripts/project.json` 的流程状态，并且**改不动** `GraphState` 的 `Current / Next / NextPlan`——焦点永远是人来定。
+不是"再教模型一遍协议"，而是让协议变成 16 个 `task_tree_*` 工具：写树自动备份到 `versions/`、自动过精炼门禁、自动同步 `scripts/project.json` 的流程状态，并且**改不动** `GraphState` 的 `Current / Next / NextPlan`——焦点永远是人来定。
+
+说一句「打开任务图」，那个网页界面会**整个嵌进对话**：能拖节点、改字段、切执行流程视图、查知识库，和在浏览器里操作完全一样，只是不用另开窗口。这走的是 MCP Apps——工具返回一个 `ui://` 资源，宿主把它渲染成沙箱 iframe，里面装的就是本地界面本身，所以不存在"另做一套简化版"的走样问题。
+
+只想瞄一眼不动手，就说「画一张任务图」，`task_tree_render` 给一张静态 PNG。
 
 ## 前置条件
 
@@ -44,9 +48,37 @@ node <kit>/scripts/install-codex-mcp.mjs --with-plugin
 
 ## 在桌面应用里怎么用
 
-插件目录只在 **ChatGPT 桌面应用**里有（Codex 模式，或 ChatGPT 模式打开 Work 开关）：**Plugins → 选来源「任务图（llm-task-tree）」→ task-tree**。装上之后新开一个会话，输入框的 `+` 里能看到它的图标，四条一键提示词（读焦点 / 写结论 / 推进一步 / 查知识库）点了就跑。
+插件目录只在 **ChatGPT 桌面应用**里有（Codex 模式，或 ChatGPT 模式打开 Work 开关）：**Plugins → 选来源「任务图（llm-task-tree）」→ task-tree**。装上之后新开一个会话，输入框的 `+` 里能看到它的图标，几条一键提示词点了就跑，第一条「打开任务图，我要自己拖着看」会把可交互的界面嵌在对话里。
 
-IDE 扩展（VS Code、Cursor 里的 Codex）**没有插件面板**——这是官方限制，不是配置问题。但 `[mcp_servers.task_tree]` 是全局的，所以在 IDE 扩展里 14 个工具照样能调，只是不出现在"插件列表"这个界面里。
+嵌入式界面需要宿主打开 MCP Apps：`~/.codex/config.toml` 的 `[features]` 里要有 `enable_mcp_apps = true`（kit 的 `install-codex-mcp.mjs` 会自动加，改完要重启桌面应用）。没开的话工具照跑，但只会回文字，界面不出来。
+
+IDE 扩展（VS Code、Cursor 里的 Codex）**没有插件面板**——这是官方限制，不是配置问题。但 `[mcp_servers.task_tree]` 是全局的，所以在 IDE 扩展里工具照样能调，只是不出现在"插件列表"这个界面里。
+
+## 从界面反向发给 Codex
+
+网页界面工具栏上的 **Codex** 按钮反过来走：它直接替你在桌面应用里发一轮，不用你切过去打字或按回车。
+
+按钮右边的 `▾` 分两段。上半段是**发什么**，三条都由服务端按当前的树现算，不是写死的模板：
+
+| 发什么 | 内容 |
+|---|---|
+| 打开任务图 | 一句 `调用 task_tree_open`，只把可交互界面放进对话，不动树 |
+| 执行下一步 | Next 节点的 id、标题和它的 **NextIdea**，外加三条约束：只做这一步、不许读 `NextPlan`、不许改焦点，做完把结果写回该节点的 `CurrentResult` |
+| 链式循环推进一步 | 服务端 `chain-step` 算出来的 `agentPrompt`（含单步上下文与停机规则） |
+
+没有可执行依据时那一条是灰的并写明原因（Next 没有 NextIdea、或者 `Chain` 为空该停机），不会白花一轮。
+
+下半段是**发到哪**：默认是本项目上次那条会话（id 记在项目里的 `.task-tree-thread`，新建的那条会被命名成「任务图工作台」方便在侧栏找），所以上下文是连着的，你可以就在那条里接着提要求。点列表里另一条只是**换目标，不发送**；换完再点上半段。「＋ 新开一条会话」同理，只是把下次发送改成新开。
+
+底部执行链那一栏还有一个 **▶ 直接开跑**，等于「链式循环推进一步」那一档：点一下就发，不用再复制 loop 命令（命令文本和「复制」留着，给 Cursor 或别的 Agent 用）。
+
+看界面本身**不需要**这个按钮，也不需要模型：双击 `打开任务图.cmd`，或直接开这个项目的固定地址（每个项目一个，按项目路径推导，重启不变）。按钮解决的只是"让可交互的图出现在对话里"这一件事。
+
+## 一台机器上的多个项目
+
+每个项目是完全独立的一份：自己的树、自己的执行链、自己的固定端口、自己的 Codex 会话。所以不用担心串味，也不用记端口。
+
+标题旁的**项目菜单**列出这台机器上装过任务图、且目录还在的项目（安装器记在 `%LOCALAPPDATA%\LLMTaskTree\projects.json`），按最近改过的排前面。点一条：那个项目的服务没在跑就先按它自己的端口拉起来，然后页面跳过去。切过去之后 Codex 按钮发的是**那个项目**的下一步，发到**那个项目**的会话里。
 
 ## 改了插件之后怎么刷新
 
@@ -69,10 +101,11 @@ node scripts/test-plugin-manifest.mjs       # 清单字段、资源尺寸、市�
 - **随仓库分发**：项目里提交 `.cursor/mcp.json`（kit 安装时自动写好，用的是 `${workspaceFolder}`，不含任何本机绝对路径）。别人克隆仓库、信任工作区即可使用。
 - **装成插件**：把本目录拷到 `~/.cursor/plugins/local/task-tree/`，然后 Developer: Reload Window。
 
-## 14 个工具
+## 16 个工具
 
 | 类别 | 工具 |
 |---|---|
+| 界面 | `task_tree_open`（把可交互的任务图界面嵌进对话，能拖能改）、`task_tree_render`（整张图截成 PNG，`scale` 可调到 2 让字更清楚） |
 | 只读 | `task_tree_focus`、`task_tree_node`、`task_tree_check_compact`、`task_tree_flow_status`、`task_tree_versions`、`task_tree_knowledge`、`task_tree_models`、`task_tree_skills` |
 | 写入 | `task_tree_write`、`task_tree_chain`、`task_tree_subtree`、`task_tree_flow_write`、`task_tree_layout` |
 | 服务 | `task_tree_server`（按需无界面拉起 / 停止 / `open` 弹界面） |
@@ -81,6 +114,9 @@ node scripts/test-plugin-manifest.mjs       # 清单字段、资源尺寸、市�
 
 ## 边界
 
-- Agent 看不见界面。`task_tree_server open` 只是在用户桌面弹出窗口，模型读不到画面内容。
+- `task_tree_open` 只在支持 MCP Apps 的宿主里出界面（ChatGPT 桌面应用；IDE 扩展和 CLI 没有这个渲染层）。不支持时它会回一个可点的本地地址，不会假装成功。
+- `task_tree_render` 给的是**一张静态图**：能看，不能拖不能点。
+- 两个都是给用户看的：模型自己读不到画面内容，要数据就调 `task_tree_focus` / `task_tree_node`。
+- 截图靠机器上已有的 Chromium（Windows 自带 Edge 就行）。都没有的话设 `TASK_TREE_CHROME` 指向浏览器可执行文件，否则这一个工具不可用，其余工具不受影响。
 - 写树必须给 `reason`，会写进 `versions/` 的备份文件名。
 - 精炼门禁不过就拒绝写入，文件零字节改动。

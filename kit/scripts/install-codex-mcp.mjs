@@ -135,6 +135,45 @@ function stripBlock(text, header) {
   return { text: cleaned, removed: true };
 }
 
+const FEATURE_FLAG = "enable_mcp_apps";
+
+/**
+ * Turns on the host feature that renders `task_tree_open`'s ui:// resource as an interactive panel.
+ * Without it the tool still runs, but the host shows only its text and the graph never appears.
+ *
+ * This is a key inside a table other things also live in, so it cannot use the append-a-block path:
+ * a second `[features]` header would make the whole config invalid. An existing value is left
+ * alone — if someone turned it off deliberately, that is their call to reverse.
+ */
+function setFeatureFlag(text, enable) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const header = lines.findIndex((line) => line.trim() === "[features]");
+
+  if (header < 0) {
+    if (!enable) return { text, changed: false, reason: "[features] not present" };
+    const separator = text.endsWith("\n\n") ? "" : text.endsWith("\n") ? "\n" : "\n\n";
+    return { text: `${text}${separator}[features]\n${FEATURE_FLAG} = true\n`, changed: true, reason: "created [features]" };
+  }
+
+  let end = header + 1;
+  while (end < lines.length && !/^\s*\[/.test(lines[end])) end += 1;
+  const at = lines.findIndex((line, index) => index > header && index < end && new RegExp(`^\\s*${FEATURE_FLAG}\\s*=`).test(line));
+
+  if (enable) {
+    if (at >= 0) return { text, changed: false, reason: `${FEATURE_FLAG} already set to: ${lines[at].trim()}` };
+    lines.splice(header + 1, 0, `${FEATURE_FLAG} = true`);
+    return { text: lines.join("\n"), changed: true, reason: `added ${FEATURE_FLAG} to [features]` };
+  }
+
+  if (at < 0 || lines[at].replace(/\s/g, "") !== `${FEATURE_FLAG}=true`) {
+    return { text, changed: false, reason: "flag absent or hand-edited; left alone" };
+  }
+  lines.splice(at, 1);
+  // Drop a table we emptied out; an empty [features] carries no meaning.
+  if (lines.slice(header + 1, end - 1).every((line) => !line.trim())) lines.splice(header, end - 1 - header);
+  return { text: lines.join("\n").replace(/\n{3,}/g, "\n\n"), changed: true, reason: `removed ${FEATURE_FLAG}` };
+}
+
 async function backup() {
   if (!existsSync(configFile)) return "";
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
@@ -151,35 +190,48 @@ if (remove) {
     text = result.text;
     if (result.removed) removed.push(item.header);
   }
-  if (!removed.length) {
+  const feature = setFeatureFlag(text, false);
+  text = feature.text;
+  if (!removed.length && !feature.changed) {
     console.log(JSON.stringify({ ok: true, action: "none", reason: "nothing registered", configFile }, null, 2));
   } else {
     const backupFile = await backup();
     if (!dryRun) await writeFile(configFile, text, "utf8");
-    console.log(JSON.stringify({ ok: true, action: dryRun ? "would-remove" : "removed", removed, configFile, backupFile }, null, 2));
+    console.log(JSON.stringify({
+      ok: true,
+      action: dryRun ? "would-remove" : "removed",
+      removed,
+      feature: feature.reason,
+      configFile,
+      backupFile
+    }, null, 2));
   }
 } else {
   const missing = blocks.filter((item) => !hasHeader(original, item.header));
-  if (!missing.length) {
+  const appended = missing.map((item) => [item.header, ...item.lines, ""].join("\n")).join("\n");
+  const separator = !appended ? "" : original.endsWith("\n\n") ? "" : original.endsWith("\n") ? "\n" : "\n\n";
+  const feature = setFeatureFlag(`${original}${separator}${appended}`, true);
+
+  if (!missing.length && !feature.changed) {
     console.log(JSON.stringify({
       ok: true,
       action: "none",
       reason: `${blocks.map((item) => item.header).join(", ")} already registered; rerun with --remove first to change them`,
+      feature: feature.reason,
       configFile
     }, null, 2));
   } else {
     const backupFile = await backup();
-    const appended = missing.map((item) => [item.header, ...item.lines, ""].join("\n")).join("\n");
-    const separator = original.endsWith("\n\n") ? "" : original.endsWith("\n") ? "\n" : "\n\n";
-    if (!dryRun) await writeFile(configFile, `${original}${separator}${appended}`, "utf8");
+    if (!dryRun) await writeFile(configFile, feature.text, "utf8");
     console.log(JSON.stringify({
       ok: true,
-      action: dryRun ? "would-append" : "appended",
+      action: `${dryRun ? "would-" : ""}${missing.length ? "append" : "update"}${dryRun ? "" : missing.length ? "ed" : "d"}`,
       headers: missing.map((item) => item.header),
+      feature: feature.reason,
       configFile,
       backupFile,
       entryScript,
-      block: appended.trimEnd().split("\n"),
+      block: appended.trimEnd().split("\n").filter(Boolean),
       next: "重启 Codex 后生效；移除用同一命令加 --remove。Git 市场分发改用 codex plugin marketplace add <owner/repo>"
     }, null, 2));
   }
